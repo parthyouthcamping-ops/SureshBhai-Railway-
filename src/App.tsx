@@ -62,27 +62,68 @@ function App() {
     const newRemaining = Math.max(0, (target.remaining_amount || 0) - amt);
     const finalStatus = newRemaining === 0 ? 'Paid' : 'Partial/Paid';
 
-    if (!isSupabaseConfigured) {
-      const updated = bookings.map(b => b.id === id ? { 
-        ...b, 
-        status: finalStatus as BookingStatus, 
-        remaining_amount: newRemaining, 
-        paid_amount: newPaid, 
-        collector_name: collectorName 
-      } : b);
-      setBookings(updated);
-      localStorage.setItem('mock_bookings', JSON.stringify(updated));
-      return;
-    }
-    
-    await supabase.from('bookings').update({ 
-      status: finalStatus, 
+    // OPTIMISTIC UPDATE: Update local state immediately
+    const updatedLocally = bookings.map(b => b.id === id ? { 
+      ...b, 
+      status: finalStatus as BookingStatus, 
       remaining_amount: newRemaining, 
       paid_amount: newPaid, 
       collector_name: collectorName 
-    }).eq('id', id);
+    } : b);
+    setBookings(updatedLocally);
+
+    if (!isSupabaseConfigured) {
+      localStorage.setItem('mock_bookings', JSON.stringify(updatedLocally));
+      return;
+    }
     
-    fetchBookings();
+    try {
+      await supabase.from('bookings').update({ 
+        status: finalStatus, 
+        remaining_amount: newRemaining, 
+        paid_amount: newPaid, 
+        collector_name: collectorName 
+      }).eq('id', id);
+      
+      // Optionally fetch to confirm sync, but our local state is already ahead
+      // fetchBookings(); 
+    } catch (err) {
+      console.error('Remote sync failed, kept local state.', err);
+    }
+  };
+
+  const handleDataLoaded = async (data: Booking[]) => {
+    setBookings(data);
+    setShowUpload(false);
+    
+    if (isSupabaseConfigured) {
+      try {
+        setLoading(true);
+        // Sync imported data to Supabase
+        const { error } = await supabase.from('bookings').insert(data.map(b => ({
+          id: b.id,
+          sr_no: b.sr_no,
+          name: b.name,
+          phone: b.phone,
+          trip_name: b.trip_name,
+          total_amount: b.total_amount,
+          paid_amount: b.paid_amount,
+          remaining_amount: b.remaining_amount,
+          status: b.status,
+          room: b.room
+        })));
+        
+        if (error) throw error;
+      } catch (err) {
+        console.error('Initial sync to Supabase failed', err);
+        // Fallback to local storage if sync fails
+        localStorage.setItem('mock_bookings', JSON.stringify(data));
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      localStorage.setItem('mock_bookings', JSON.stringify(data));
+    }
   };
 
   return (
@@ -113,7 +154,7 @@ function App() {
 
       {showUpload && (
         <UploadExcel 
-          onDataLoaded={(d) => { setBookings(d); setShowUpload(false); }} 
+          onDataLoaded={handleDataLoaded} 
           onClose={() => setShowUpload(false)} 
         />
       )}

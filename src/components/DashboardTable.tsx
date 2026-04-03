@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FC } from 'react';
-import { Phone, Receipt, Share2, Wallet, User, CheckCircle2 } from 'lucide-react';
+import { Phone, Receipt, Share2, Wallet, User, CheckCircle2, Trash2 } from 'lucide-react';
 import type { Booking, BookingStatus } from '../types';
 import { generateReceipt } from '../utils/ReceiptGenerator';
 import { CollectModal } from './CollectModal';
@@ -8,9 +8,10 @@ import { CollectModal } from './CollectModal';
 interface DashboardTableProps {
   bookings: Booking[];
   onUpdateStatus: (id: string, status: BookingStatus, collectorName: string, amount?: number) => void;
+  onDelete: (id: string) => void;
 }
 
-export const DashboardTable: FC<DashboardTableProps> = ({ bookings = [], onUpdateStatus }) => {
+export const DashboardTable: FC<DashboardTableProps> = ({ bookings = [], onUpdateStatus, onDelete }) => {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
   if (!Array.isArray(bookings) || bookings.length === 0) {
@@ -142,6 +143,15 @@ With gratitude,
                 >
                   <Receipt size={18} />
                 </button>
+
+                <button 
+                  className="btn btn-icon btn-danger-lite" 
+                  onClick={() => { if(window.confirm(`Delete ${booking.name}?`)) onDelete(booking.id!); }}
+                  title="Delete traveler"
+                  aria-label="Delete"
+                >
+                  <Trash2 size={18} />
+                </button>
               </div>
             </div>
           ))}
@@ -208,6 +218,13 @@ With gratitude,
                           disabled={booking.paid_amount <= 0}
                         >
                           WA
+                        </button>
+                        <button 
+                          className="btn btn-icon btn-icon-small btn-danger-lite" 
+                          onClick={() => { if(window.confirm(`Delete ${booking.name}?`)) onDelete(booking.id!); }}
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>

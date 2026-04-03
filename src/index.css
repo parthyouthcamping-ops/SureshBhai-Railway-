@@ -159,6 +159,16 @@ h1, h2, h3, h4 {
   cursor: not-allowed;
 }
 
+.btn-danger-lite {
+  background: #FEF2F2 !important;
+  color: #EF4444 !important;
+}
+
+.btn-danger-lite:hover {
+  background: #FEE2E2 !important;
+  color: #DC2626 !important;
+}
+
 .status-badge {
   padding: 0.25rem 0.6rem;
   border-radius: 6px;

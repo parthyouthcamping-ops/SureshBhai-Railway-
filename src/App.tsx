@@ -126,6 +126,21 @@ function App() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    const updated = bookings.filter(b => b.id !== id);
+    setBookings(updated);
+    
+    if (!isSupabaseConfigured) {
+      localStorage.setItem('mock_bookings', JSON.stringify(updated));
+    } else {
+      try {
+        await supabase.from('bookings').delete().eq('id', id);
+      } catch (err) {
+        console.error('Failed to delete from Supabase', err);
+      }
+    }
+  };
+
   return (
     <div className="app-shell">
       <header className="header">
@@ -148,7 +163,7 @@ function App() {
         {loading ? (
           <div className="loading-container">Synchronizing station data...</div>
         ) : (
-          <DashboardTable bookings={filteredBookings} onUpdateStatus={handleUpdateStatus} />
+          <DashboardTable bookings={filteredBookings} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />
         )}
       </main>
 

@@ -1,4 +1,4 @@
-import { Booking } from '../types';
+import type { Booking } from '../types';
 import { generateReceipt } from './ReceiptGenerator';
 
 interface EmailParams {
@@ -60,7 +60,7 @@ export const sendPaymentEmail = async ({ booking, paidAmount, collectorName }: E
 
     // 3. Send via Resend API
     // NOTE: In production, the API Key should be set in .env (VITE_RESEND_API_KEY)
-    const RESEND_API_KEY = (import.meta as any).env.VITE_RESEND_API_KEY;
+    const RESEND_API_KEY = import.meta.env.VITE_RESEND_API_KEY;
 
     if (!RESEND_API_KEY) {
       console.log('--- MOCK EMAIL SEND (No API Key) ---');

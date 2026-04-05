@@ -19,6 +19,8 @@ export const ExcelImportProcessor: FC<ExcelImportProcessorProps> = ({ onComplete
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [defaultTripName, setDefaultTripName] = useState('New Batch');
+  const [detectedHeaderRow, setDetectedHeaderRow] = useState<number | null>(null);
 
   const processExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -34,54 +36,74 @@ export const ExcelImportProcessor: FC<ExcelImportProcessorProps> = ({ onComplete
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet);
+        
+        // 1. SMART HEADER DETECTION (First 10 rows)
+        const allRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1 });
+        let headerRowIndex = -1;
+        
+        const headerKeywords = ['name', 'mobile', 'phone', 'contact', 'age', 'room', 'remark', 'guest'];
+        
+        for (let i = 0; i < Math.min(allRows.length, 10); i++) {
+          const row = allRows[i] as unknown[];
+          if (!Array.isArray(row)) continue;
+          const rowString = row.join(' ').toLowerCase();
+          const matches = headerKeywords.filter(k => rowString.includes(k));
+          if (matches.length >= 2) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+
+        // Fallback to row 0 if no clear headers found
+        const finalHeaderIndex = headerRowIndex === -1 ? 0 : headerRowIndex;
+        setDetectedHeaderRow(finalHeaderIndex + 1);
+
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { range: finalHeaderIndex });
 
         if (!jsonData || jsonData.length === 0) {
-          throw new Error('Excel sheet is empty or invalid.');
+          throw new Error('No travelers found in Excel.');
         }
 
         const cleanNumber = (val: unknown): number => {
           if (typeof val === 'number') return val;
           if (!val) return 0;
-          const cleaned = String(val).replace(/[₹$,]/g, '').trim();
-          const num = parseFloat(cleaned);
+          const num = parseFloat(String(val).replace(/[₹$,]/g, '').trim());
           return isNaN(num) ? 0 : num;
         };
 
         const normalizedRows = jsonData.map((row) => {
           const newRow: Record<string, unknown> = {};
           Object.keys(row).forEach(key => {
-            newRow[key.toLowerCase().replace(/\s/g, '_')] = row[key];
+            newRow[key.toLowerCase().replace(/\s/g, '_').replace('.', '')] = row[key];
           });
           return newRow;
         });
 
-        const formattedRaw: RawImport[] = normalizedRows.map((row) => ({
-          client_name: String(
-            row.client_name || row.name || row.client || row.customer || 
-            row.passenger_name || row.passenger || row.traveler_name || row.traveler || ''
-          ).trim(),
-          trip_name: String(
-            row.trip_name || row.trip || row.package || row.trip_name || 
-            row.destination || row.group || row.event || ''
-          ).trim(),
-          total_amount: cleanNumber(
-            row.total_amount || row.total || row.cost || row.price || 
-            row.trip_cost || row.total_price || 0
-          ),
-          paid_amount: cleanNumber(
-            row.paid_amount || row.paid || row.amount || row.collected || 
-            row.received || row.payment || 0
-          ),
-          payment_date: String(
-            row.payment_date || row.date || row.payment_date || 
-            row.created_at || new Date().toISOString().split('T')[0]
-          ),
-        })).filter((r: RawImport) => r.client_name && r.trip_name);
+        const formattedRaw: RawImport[] = normalizedRows.map((row) => {
+          const name = String(row.name || row.guest_name || row.passenger_name || '').trim();
+          const phone = String(row.mobile_no || row.phone || row.contact || row.mobile || '').trim();
+          // RULE 3: TRIP HANDLING
+          const trip = String(row.trip || row.trip_name || row.package || defaultTripName || 'Trip').trim();
+          const age = cleanNumber(row.age);
+          const room = String(row.room || '').trim();
+          const remark = String(row.remark || '').trim();
+          
+          return {
+            client_name: name,
+            trip_name: trip,
+            phone: phone,
+            age: age,
+            room: room,
+            remark: remark,
+            total_amount: cleanNumber(row.total || row.total_amount || 0),
+            paid_amount: cleanNumber(row.paid || row.paid_amount || 0),
+            payment_date: new Date().toISOString().split('T')[0]
+          };
+        }).filter((r) => r.client_name && r.phone); // RULE 5: Name and Phone exist
 
         if (formattedRaw.length === 0) {
-          const keys = jsonData.length > 0 ? Object.keys(jsonData[0]).join(', ') : 'unknown';
-          throw new Error(`No valid travelers found. Found columns: [${keys}]. Please ensure you have "Name" and "Trip" columns.`);
+          const sampleKeys = jsonData.length > 0 ? Object.keys(jsonData[0]).join(', ') : 'unknown';
+          throw new Error(`No valid travelers found. Detected headers row ${finalHeaderIndex + 1} with columns: [${sampleKeys}]. Ensure Name and Mobile columns exist.`);
         }
 
         setRawData(formattedRaw);
@@ -250,52 +272,76 @@ export const ExcelImportProcessor: FC<ExcelImportProcessorProps> = ({ onComplete
               <span className="text-xs">{error}</span>
             </div>
           )}
-
           {step === 'upload' && (
-            <div 
-              className="upload-dropzone card bg-soft-green dashed-border py-25 text-center cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <FileSpreadsheet size={48} className="text-muted m-auto mb-1" />
-              <h3 className="text-sm">Click to Upload Payment File</h3>
-              <p className="text-xs text-muted">client_name, trip_name, total_amount, paid_amount</p>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept=".xlsx,.xls,.csv" 
-                onChange={processExcel}
-                title="Select Excel file"
-              />
-              {loading && <div className="mt-1 text-xs text-primary">Parsing data...</div>}
+            <div className="animation-fade-in">
+              <div className="card mb-1 p-1 bg-soft-orange">
+                <div className="flex-center gap-1 mb-1">
+                   <TableIcon size={16} />
+                   <h4 className="text-xs m-0">Default Trip (if missing in Excel)</h4>
+                </div>
+                <input 
+                  type="text" 
+                  className="input-field text-xs" 
+                  value={defaultTripName} 
+                  onChange={(e) => setDefaultTripName(e.target.value)}
+                  placeholder="e.g. Goa Batch April"
+                />
+              </div>
+
+              <div 
+                className="upload-dropzone card bg-soft-green dashed-border py-25 text-center cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <FileSpreadsheet size={48} className="text-muted m-auto mb-1" />
+                <h3 className="text-sm">Click to Upload Payment File</h3>
+                <p className="text-xs text-muted">NAME, MOBILE NO, AGE, ROOM, REMARK</p>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept=".xlsx,.xls,.csv" 
+                  onChange={processExcel}
+                  title="Select Excel file"
+                />
+                {loading && <div className="mt-1 text-xs text-primary">Parsing rows...</div>}
+              </div>
             </div>
           )}
 
           {step === 'raw_preview' && (
             <div className="animation-fade-in">
               <div className="flex-between mb-1">
-                 <div className="text-xs text-muted">Entries stored: <strong>{rawData.length}</strong></div>
+                 <div>
+                    <div className="text-xs text-bold text-success">Header row detected at: #{detectedHeaderRow}</div>
+                    <div className="text-2xs text-muted">Showing preview of first 5 / {rawData.length} travelers</div>
+                 </div>
                  <button className="btn btn-primary text-xs" onClick={() => setStep('grouped_preview')}>
-                    Next: Group Data <ArrowRight size={14} />
+                    Next: Process Data <ArrowRight size={14} />
                  </button>
               </div>
               <div className="card no-padding overflow-x-auto max-h-300">
                 <table className="text-xs">
                   <thead>
                     <tr>
-                      <th>Client</th>
-                      <th>Trip</th>
-                      <th className="text-right">Total</th>
-                      <th className="text-right">Paid</th>
+                      <th>Name & Phone</th>
+                      <th>Trip/Package</th>
+                      <th>Room/Age</th>
+                      <th>Remark</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rawData.map((row, i) => (
+                    {rawData.slice(0, 5).map((row, i) => (
                       <tr key={i}>
-                        <td>{row.client_name}</td>
+                        <td>
+                          <div className="text-bold">{row.client_name}</div>
+                          <div className="text-muted text-2xs">{row.phone}</div>
+                        </td>
                         <td>{row.trip_name}</td>
-                        <td className="text-right">₹{row.total_amount.toLocaleString()}</td>
-                        <td className="text-right text-success">₹{row.paid_amount.toLocaleString()}</td>
+                        <td>
+                           <div>{row.room || '-'}</div>
+                           <div className="text-2xs text-muted">Age: {row.age || '-'}</div>
+                        </td>
+                        <td className="text-2xs">{row.remark || '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -307,7 +353,7 @@ export const ExcelImportProcessor: FC<ExcelImportProcessorProps> = ({ onComplete
           {step === 'grouped_preview' && (
             <div className="animation-fade-in">
               <div className="flex-between mb-1">
-                 <div className="text-xs text-muted">Unique Bookings: <strong>{groupedData.length}</strong></div>
+                 <div className="text-xs text-muted">Ready to Import: <strong>{groupedData.length}</strong> unique records</div>
                  <div className="flex-center gap-1">
                     <button className="btn btn-secondary text-xs" onClick={() => setStep('raw_preview')}>Back</button>
                     <button className="btn btn-primary text-xs" onClick={handleConfirmImport} disabled={loading}>
@@ -319,11 +365,10 @@ export const ExcelImportProcessor: FC<ExcelImportProcessorProps> = ({ onComplete
                 <table className="text-xs">
                   <thead>
                     <tr>
-                      <th>Client & Trip</th>
+                      <th>Client</th>
                       <th className="text-right">Total</th>
                       <th className="text-right">Paid</th>
-                      <th className="text-right">Balance</th>
-                      <th>Payments</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -335,15 +380,10 @@ export const ExcelImportProcessor: FC<ExcelImportProcessorProps> = ({ onComplete
                         </td>
                         <td className="text-right">₹{group.total_amount.toLocaleString()}</td>
                         <td className="text-right text-success text-bold">₹{group.paid_total.toLocaleString()}</td>
-                        <td className="text-right text-danger">₹{group.remaining_amount.toLocaleString()}</td>
                         <td>
-                          <div className="flex-center gap-1 flex-wrap">
-                            {group.payments.map((p, j) => (
-                              <span key={j} className="status-badge bg-light-gray text-2xs">
-                                ₹{p.amount} • {p.date}
-                              </span>
-                            ))}
-                          </div>
+                           <span className={`status-badge text-2xs ${group.remaining_amount <= 0 ? 'status-paid' : 'status-partialpaid'}`}>
+                              {group.remaining_amount <= 0 ? 'Fully Paid' : 'Partial'}
+                           </span>
                         </td>
                       </tr>
                     ))}

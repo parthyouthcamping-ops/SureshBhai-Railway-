@@ -137,14 +137,14 @@ export const UploadExcel: FC<UploadExcelProps> = ({ onDataLoaded, onClose }) => 
 
   return (
     <div className="modal-overlay" role="dialog" aria-labelledby="upload-title">
-      <div className="modal-content" style={{ maxWidth: '450px' }}>
+      <div className="modal-content max-w-450">
         <div className="modal-header">
           <div className="flex-center gap-1">
             <div className="icon-container-lite bg-soft-orange">
               <FileSpreadsheet size={20} />
             </div>
             <div>
-              <h1 id="upload-title" className="text-sm" style={{ margin: 0 }}>Import Travelers</h1>
+              <h1 id="upload-title" className="text-sm m-0">Import Travelers</h1>
               <p className="text-xs text-muted">Fuzzy search enabled</p>
             </div>
           </div>
@@ -155,16 +155,10 @@ export const UploadExcel: FC<UploadExcelProps> = ({ onDataLoaded, onClose }) => 
 
         <div className="modal-body mb-2 mt-2">
           <div 
-            className="upload-dropzone card bg-soft-green"
+            className="upload-dropzone card bg-soft-green dashed-border py-25 text-center cursor-pointer"
             onClick={() => fileInputRef.current?.click()}
-            style={{ 
-              border: '2px dashed var(--border)',
-              padding: '2.5rem 1rem',
-              textAlign: 'center',
-              cursor: 'pointer'
-            }}
           >
-            <Upload size={36} className="text-muted" style={{ marginBottom: '0.75rem' }} />
+            <Upload size={36} className="text-muted mb-075" />
             <h3 className="text-sm">Click to Upload Excel</h3>
             <p className="text-xs text-muted">.xlsx or .xls files only</p>
             <input 
@@ -172,14 +166,14 @@ export const UploadExcel: FC<UploadExcelProps> = ({ onDataLoaded, onClose }) => 
               aria-label="Upload Excel File"
               type="file" 
               ref={fileInputRef} 
-              style={{ display: 'none' }} 
+              className="hidden"
               accept=".xlsx, .xls" 
               onChange={handleFileUpload} 
             />
           </div>
 
-          <div className="p-1" style={{ border: '1px solid var(--border)', borderRadius: '12px' }}>
-            <p className="text-xs text-muted" style={{ marginBottom: '1rem' }}>
+          <div className="p-1 dashed-border">
+            <p className="text-xs text-muted mb-1">
               <strong>Standard Format:</strong> Use our template to ensure 100% accurate data matching.
             </p>
             <button className="btn btn-secondary w-full text-sm" onClick={downloadTemplate}>

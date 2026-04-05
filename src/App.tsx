@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import type { Booking, BookingStatus } from './types';
-import { UploadExcel } from './components/UploadExcel';
+import { ExcelImportProcessor } from './components/ExcelImportProcessor';
 import { DashboardTable } from './components/DashboardTable';
 import { Database } from 'lucide-react';
 
@@ -53,7 +53,7 @@ function App() {
     return Array.isArray(bookings) ? [...bookings] : [];
   }, [bookings]);
 
-  const handleUpdateStatus = async (id: string, _status: BookingStatus, collectorName: string, amountCollected?: number) => {
+  const handleUpdateStatus = async (id: string, _status: BookingStatus, collectorName: string, amountCollected: number, paymentMethod: 'Cash' | 'Online') => {
     const amt = amountCollected || 0;
     const target = bookings.find(b => b.id === id);
     if (!target) return;
@@ -68,7 +68,12 @@ function App() {
       status: finalStatus as BookingStatus, 
       remaining_amount: newRemaining, 
       paid_amount: newPaid, 
-      collector_name: collectorName 
+      collector_name: collectorName,
+      payment_method: paymentMethod,
+      payment_history: [
+        ...(b.payment_history || []),
+        { amount: amt, date: new Date().toISOString(), collector: collectorName, payment_method: paymentMethod }
+      ]
     } : b);
     setBookings(updatedLocally);
 
@@ -78,53 +83,20 @@ function App() {
     }
     
     try {
+      const updatedBooking = updatedLocally.find(b => b.id === id);
       await supabase.from('bookings').update({ 
         status: finalStatus, 
         remaining_amount: newRemaining, 
         paid_amount: newPaid, 
-        collector_name: collectorName 
+        collector_name: collectorName,
+        payment_method: paymentMethod,
+        payment_history: updatedBooking?.payment_history
       }).eq('id', id);
-      
-      // Optionally fetch to confirm sync, but our local state is already ahead
-      // fetchBookings(); 
     } catch (err) {
       console.error('Remote sync failed, kept local state.', err);
     }
   };
 
-  const handleDataLoaded = async (data: Booking[]) => {
-    setBookings(data);
-    setShowUpload(false);
-    
-    if (isSupabaseConfigured) {
-      try {
-        setLoading(true);
-        // Sync imported data to Supabase
-        const { error } = await supabase.from('bookings').insert(data.map(b => ({
-          id: b.id,
-          sr_no: b.sr_no,
-          name: b.name,
-          phone: b.phone,
-          trip_name: b.trip_name,
-          total_amount: b.total_amount,
-          paid_amount: b.paid_amount,
-          remaining_amount: b.remaining_amount,
-          status: b.status,
-          room: b.room
-        })));
-        
-        if (error) throw error;
-      } catch (err) {
-        console.error('Initial sync to Supabase failed', err);
-        // Fallback to local storage if sync fails
-        localStorage.setItem('mock_bookings', JSON.stringify(data));
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      localStorage.setItem('mock_bookings', JSON.stringify(data));
-    }
-  };
 
   const handleDelete = async (id: string) => {
     const updated = bookings.filter(b => b.id !== id);
@@ -143,33 +115,47 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="header">
+      <header className="header shadow-sm">
         <div className="flex-center gap-1">
           <div className="icon-bg">
-            <Database size={20} color="var(--primary)" />
+            <Database size={20} />
           </div>
-          <h1>YouthCamping Dashboard</h1>
+          <div>
+            <h1 className="text-xl mb-0 pr-15">YouthCamping</h1>
+            <div className="text-muted text-xs font-medium uppercase tracking-widest mt-4px">Rail Operations OS</div>
+          </div>
+        </div>
+        <div className="desktop-only text-muted text-sm font-medium">
+           <span className="opacity-50">STATION TRACKER</span>
         </div>
       </header>
 
-      <main className="app-container">
-        <div className="flex-between mb-2">
-           <div className="text-muted text-sm">
-              Station Drop-off Tracker • <strong>{bookings.length}</strong> passengers
+      <main className="app-container animate-fade-in">
+        <div className="flex-between mb-1">
+           <div>
+              <h2 className="text-lg">Dashboard</h2>
+              <div className="text-muted text-xs">
+                 Managing <strong>{bookings.length}</strong> passengers for today
+              </div>
            </div>
-           <button className="btn btn-primary" onClick={() => setShowUpload(true)}>+ Import List</button>
+           <button className="btn btn-primary" onClick={() => setShowUpload(true)}>
+             <Database size={16} />
+             Import List
+           </button>
         </div>
 
         {loading ? (
-          <div className="loading-container">Synchronizing station data...</div>
+          <div className="loading-container text-lg font-medium opacity-50">
+             <div className="animation-pulse">Synchronizing secure data...</div>
+          </div>
         ) : (
           <DashboardTable bookings={filteredBookings} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} />
         )}
       </main>
 
       {showUpload && (
-        <UploadExcel 
-          onDataLoaded={handleDataLoaded} 
+        <ExcelImportProcessor 
+          onComplete={fetchBookings} 
           onClose={() => setShowUpload(false)} 
         />
       )}

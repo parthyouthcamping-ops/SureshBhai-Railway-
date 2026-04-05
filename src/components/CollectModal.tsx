@@ -6,12 +6,13 @@ import { X, CheckCircle } from 'lucide-react';
 interface CollectModalProps {
   booking: Booking;
   onClose: () => void;
-  onConfirm: (collectorName: string, amount: number) => void;
+  onConfirm: (collectorName: string, amount: number, paymentMethod: 'Cash' | 'Online') => void;
 }
 
 export const CollectModal: FC<CollectModalProps> = ({ booking, onClose, onConfirm }) => {
   const [collectorName, setCollectorName] = useState('Ground Staff');
   const [collectAmount, setCollectAmount] = useState(booking.remaining_amount || 0);
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Online'>('Cash');
 
   const handleConfirm = () => {
     const amt = parseFloat(String(collectAmount));
@@ -19,44 +20,66 @@ export const CollectModal: FC<CollectModalProps> = ({ booking, onClose, onConfir
       alert("Please enter a valid amount.");
       return;
     }
-    onConfirm(collectorName.trim() || 'Ground Staff', amt);
+    onConfirm(collectorName.trim() || 'Ground Staff', amt, paymentMethod);
   };
 
   return (
-    <div className="modal-overlay" role="dialog" aria-labelledby="collect-title">
-      <div className="modal-content">
+    <div className="modal-overlay animate-fade-in" role="dialog" aria-labelledby="collect-title">
+      <div className="modal-content shadow-lg">
         <div className="modal-header">
-          <h2 id="collect-title" style={{ fontSize: '1.2rem', margin: 0 }}>Cash Collection</h2>
-          <button className="btn btn-ghost" title="Close" aria-label="Close" onClick={onClose}><X size={20} /></button>
+           <div className="flex-center gap-1">
+             <div className="icon-bg icon-bg-small">
+                <Wallet size={18} />
+             </div>
+             <h2 id="collect-title" className="text-lg font-bold m-0 text-primary">Payment Collection</h2>
+           </div>
+           <button className="btn btn-ghost btn-icon-small" title="Close" aria-label="Close" onClick={onClose}><X size={20} /></button>
         </div>
 
-        <div className="card bg-soft-green p-1" style={{ textAlign: 'center' }}>
-          <div className="text-xs text-muted">Processing for</div>
-          <div className="text-bold" style={{ fontSize: '1.1rem' }}>{booking.name}</div>
-          <div className="text-xs text-muted">Room: {booking.room || 'N/A'}</div>
+        <div className="card bg-soft-green p-1 text-center mb-1">
+          <div className="text-xs text-muted font-medium mb-4px uppercase tracking-wider">Processing Payment for</div>
+          <div className="text-xl font-black text-primary">{booking.name}</div>
+          <div className="text-xs text-muted mt-4px">Room: {booking.room || 'N/A'} • #{booking.sr_no}</div>
         </div>
 
         <div className="form-group mt-2">
+          <label className="form-label">Payment Method</label>
+          <div className="payment-method-toggle">
+            <button 
+              className={`method-btn ${paymentMethod === 'Cash' ? 'active' : ''}`}
+              onClick={() => setPaymentMethod('Cash')}
+            >
+              Cash
+            </button>
+            <button 
+              className={`method-btn ${paymentMethod === 'Online' ? 'active' : ''}`}
+              onClick={() => setPaymentMethod('Online')}
+            >
+              Online
+            </button>
+          </div>
+        </div>
+
+        <div className="form-group mt-1">
           <label className="form-label" htmlFor="collect-amount">Payment Amount (INR)</label>
-          <div className="flex-center" style={{ position: 'relative' }}>
-             <span className="text-muted" style={{ position: 'absolute', left: '12px' }}>₹</span>
+          <div className="flex-center relative">
+             <span className="text-muted absolute left-12">₹</span>
              <input 
                id="collect-amount"
                type="number" 
-               className="input-field"
-               style={{ paddingLeft: '28px', fontSize: '1.25rem', fontWeight: 800, color: '#10B981' }}
+               className="input-field pl-7 text-xl font-black text-success"
                value={collectAmount} 
                onChange={(e) => setCollectAmount(Number(e.target.value))} 
                placeholder="0.00" 
              />
           </div>
-          <p className="text-muted text-xs" style={{ marginTop: '0.5rem', textAlign: 'right' }}>
+          <p className="text-muted text-xs mt-05 text-right">
              Max: ₹{booking.remaining_amount.toLocaleString()}
           </p>
         </div>
 
         <div className="form-group">
-          <label className="form-label" htmlFor="collector-name">Collector Name</label>
+          <label className="form-label" htmlFor="collector-name">{paymentMethod === 'Cash' ? 'Collector Name' : 'Verified By'}</label>
           <input 
             id="collector-name"
             type="text" 
@@ -68,15 +91,14 @@ export const CollectModal: FC<CollectModalProps> = ({ booking, onClose, onConfir
         </div>
 
         <div className="modal-footer mt-2">
-          <button className="btn btn-secondary w-full" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
+          <button className="btn btn-secondary flex-1" onClick={onClose}>Discard</button>
           <button 
-            className="btn btn-primary w-full" 
-            style={{ flex: 2 }}
+            className="btn btn-primary flex-2" 
             onClick={handleConfirm}
-            title="Confirm Cash Collection"
+            title={`Confirm ${paymentMethod} Payment`}
           >
             <CheckCircle size={18} />
-            Confirm Payment
+            Finalize Receipt
           </button>
         </div>
       </div>
